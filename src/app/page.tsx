@@ -9,22 +9,32 @@ import TableRow from '@mui/material/TableRow';
 import Paper from '@mui/material/Paper';
 import { Box, Button, Modal, Stack, TextField, Typography } from "@mui/material";
 import { fireStore } from "../../firebase";
-import { collection, deleteDoc, doc, getDocs, query, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc } from "firebase/firestore";
 import { useEffect, useState } from "react";
 
+interface pantryItem {
+  name: string;
+  count: number;
+}
+
 export default function Home() {
-  const [pantry, setPantry] = useState<string[]>([]);
+  const [pantry, setPantry] = useState<pantryItem[]>([]);
   const [open, setOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>("");
+  const [itemCount, setItemCount] = useState<number>(1);
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
 
   const updatePantry = async () =>{
     const snapshot = query(collection(fireStore, 'pantry'));
     const docs = await getDocs(snapshot);
-    const pantryList: string[] = [];
+    const pantryList: pantryItem[] = [];
     docs.forEach((d) => {
-      pantryList.push(d.id);
+      const { count } = d.data();
+      pantryList.push({
+        name: d.id,
+        count
+      });
     })
     setPantry(pantryList);
   }
@@ -33,9 +43,9 @@ export default function Home() {
     updatePantry();
   }, []);
 
-  const addItem = async (name: string) => {
+  const addItem = async (name: string, count: number) => {
     const docRef = doc(collection(fireStore, "pantry"), name);
-    await setDoc(docRef, {});
+    await setDoc(docRef, { count });
     await updatePantry();
   }
 
@@ -43,6 +53,32 @@ export default function Home() {
     const docRef = doc(collection(fireStore, "pantry"), name);
     await deleteDoc(docRef);
     await updatePantry();
+  }
+
+  const decrementItem = async (name: string) => {
+    const docRef = doc(collection(fireStore, "pantry"), name);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      const {count} = docSnap.data();
+      if (count === 1) {
+        await deleteDoc(docRef);
+      } else{
+        await setDoc(docRef, { count: count - 1 });
+      }
+      await updatePantry();
+    }
+  }
+
+  const incrementItem = async (name: string) => {
+    const docRef = doc(collection(fireStore, "pantry"), name);
+    const docSnap = await getDoc(docRef);
+
+    if (docSnap.exists()) {
+      const {count} = docSnap.data();
+      await setDoc(docRef, { count: count + 1 });
+      await updatePantry();
+    }
   }
 
   return (
@@ -55,17 +91,27 @@ export default function Home() {
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: "bold" }}>Name</TableCell>
+              <TableCell sx={{ fontWeight: "bold" }} align="center">Count</TableCell>
               <TableCell sx={{ fontWeight: "bold" }} align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {pantry.map((name, id) => (
+            {pantry.map(({ name, count }, id) => (
               <TableRow
                 key={id}
                 sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
               >
                 <TableCell component="th" scope="row">
                   {name}
+                </TableCell>
+                <TableCell align="center">
+                  <Button variant="outlined" sx={{marginRight: "20px"}} onClick={() => decrementItem(name)}>
+                    -
+                  </Button>
+                  {count}
+                  <Button variant="outlined" sx={{marginLeft: "20px"}} onClick={() => incrementItem(name)}>
+                    +
+                  </Button>
                 </TableCell>
                 <TableCell align="right">
                   <Button variant="outlined" onClick={() => removeItem(name)}>Delete</Button>
@@ -98,9 +144,20 @@ export default function Home() {
               Add item
             </Typography>
             <TextField id="outlined-name" label="Name" variant="outlined" value={itemName} onChange={(e) => setItemName(e.target.value)} />
+            <TextField
+              id="outlined-number"
+              label="Number"
+              type="number"
+              InputLabelProps={{
+                shrink: true,
+              }}
+              value={itemCount}
+              onChange={(e) => setItemCount(Number(e.target.value))}
+            />
             <Button variant="contained" onClick={() => {
-              addItem(itemName);
+              addItem(itemName, itemCount);
               setItemName('');
+              setItemCount(1);
               handleClose();
             }}>Add</Button>
           </Stack>
